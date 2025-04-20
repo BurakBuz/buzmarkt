@@ -1,71 +1,100 @@
-import React from 'react';
-import { View, TextInput, Button, Text, StyleSheet } from 'react-native';
-import { Formik } from 'formik';
-import * as Yup from 'yup';
-import axios from 'axios';
-import { useDispatch } from 'react-redux';
-import { loginSuccess } from '../redux/slices/authSlice';
-
-const LoginSchema = Yup.object().shape({
-  email: Yup.string().email('Geçersiz e-posta').required('Zorunlu'),
-  password: Yup.string().min(6, 'En az 6 karakter').required('Zorunlu'),
-});
+import React, {useState} from 'react';
+import {View, Text, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {AuthStackParamList, RootStackParamList} from '../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {login} from '../services/api';
+import {commonStyles, colors} from '../styles/theme';
 
 const LoginScreen = () => {
-  const dispatch = useDispatch();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation<
+    NativeStackNavigationProp<AuthStackParamList & RootStackParamList>
+  >();
 
-  const handleLogin = async (values: { email: string; password: string }) => {
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in both email and password fields.');
+      return;
+    }
+
     try {
-      const response = await axios.post('https://reqres.in/api/login', values);
-      dispatch(loginSuccess(response.data.token));
-      console.log('Giriş başarılı');
+      setLoading(true);
+      const response = await login({email, password});
+      await AsyncStorage.setItem('userToken', response.token);
+      navigation.replace('Main');
     } catch (error) {
-      console.log('Giriş başarısız', error);
+      Alert.alert(
+        'Login Failed',
+        'Invalid email or password. Please try again.',
+      );
+      console.error('Login error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Formik
-        initialValues={{ email: '', password: '' }}
-        validationSchema={LoginSchema}
-        onSubmit={handleLogin}
-      >
-        {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
-          <>
-            <TextInput
-              placeholder="E-posta"
-              style={styles.input}
-              onChangeText={handleChange('email')}
-              onBlur={handleBlur('email')}
-              value={values.email}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            {touched.email && errors.email && <Text style={styles.error}>{errors.email}</Text>}
+    <View style={commonStyles.container}>
+      <Image
+        source={require('../assets/buz.png')}
+        style={commonStyles.logo}
+        resizeMode="contain"
+      />
+      <Text style={commonStyles.title}>Login</Text>
+      <Text style={commonStyles.subtitle}>Enter your email and password</Text>
 
-            <TextInput
-              placeholder="Şifre"
-              style={styles.input}
-              onChangeText={handleChange('password')}
-              onBlur={handleBlur('password')}
-              value={values.password}
-              secureTextEntry
-            />
-            {touched.password && errors.password && <Text style={styles.error}>{errors.password}</Text>}
+      <View style={commonStyles.inputContainer}>
+        <TextInput
+          style={[commonStyles.input, !email && commonStyles.inputError]}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          editable={!loading}
+        />
+        <View style={commonStyles.passwordContainer}>
+          <TextInput
+            style={[commonStyles.input, commonStyles.passwordInput, !password && commonStyles.inputError]}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            editable={!loading}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={commonStyles.eyeIcon}
+            disabled={loading}>
+            <Text>{showPassword ? '👁️' : '👁️'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-            <Button title="Giriş Yap" onPress={handleSubmit as () => void} />
-          </>
+      <TouchableOpacity
+        style={[commonStyles.button, loading && commonStyles.disabledButton]}
+        onPress={handleLogin}
+        disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={commonStyles.buttonText}>Login</Text>
         )}
-      </Formik>
+      </TouchableOpacity>
+
+      <View style={commonStyles.navigationContainer}>
+        <Text style={commonStyles.navigationText}>Don't have an account? </Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+          <Text style={commonStyles.linkText}>Sign Up</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { padding: 16, marginTop: 100 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 5 },
-  error: { color: 'red', marginBottom: 10 },
-});
 
 export default LoginScreen;
